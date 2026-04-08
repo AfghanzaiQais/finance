@@ -276,6 +276,7 @@ a { color:inherit; text-decoration:none; }
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); padding:16px; margin-bottom:12px;
   transition:var(--transition);
+   display:none;
 }
 .goal-card:active { transform:scale(0.99); }
 .goal-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; gap:8px; }
@@ -499,6 +500,37 @@ a { color:inherit; text-decoration:none; }
 @keyframes countUp { from { opacity:0; transform:scale(0.8); } to { opacity:1; transform:scale(1); } }
 .count-animate { animation:countUp 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
 
+/* Tab pills (Goals/Expenses) */
+.tab-pill {
+  padding:7px 16px; border-radius:99px; border:none; background:transparent;
+  color:var(--text2); font-size:0.72rem; font-weight:700; cursor:pointer; transition:var(--transition);
+  font-family:inherit;
+}
+.tab-pill.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.2); }
+
+/* Filter pills */
+.filter-pill {
+  flex-shrink:0; padding:6px 14px; border-radius:99px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text2); font-size:0.68rem; font-weight:700;
+  cursor:pointer; transition:var(--transition); font-family:inherit;
+  white-space:nowrap;
+}
+.filter-pill.active { background:var(--orange); border-color:var(--orange); color:#fff; }
+
+/* Expense row */
+.exp-row {
+  display:flex; align-items:center; gap:10px;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:10px 12px;
+  transition:var(--transition);
+}
+.exp-icon { font-size:1.2rem; flex-shrink:0; }
+.exp-info { flex:1; min-width:0; }
+.exp-desc { font-size:0.8rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.exp-meta { font-size:0.6rem; color:var(--text3); margin-top:1px; }
+.exp-amount { font-family:var(--font-mono); font-size:0.85rem; font-weight:600; color:var(--red); flex-shrink:0; }
+.exp-del { color:var(--text3); font-size:0.85rem; cursor:pointer; padding:4px; flex-shrink:0; }
+
 /* stagger animations for cards */
 .stagger > * { animation:slideUp 0.3s ease both; }
 .stagger > *:nth-child(1) { animation-delay:0.03s; }
@@ -579,6 +611,20 @@ a { color:inherit; text-decoration:none; }
     <button class="btn btn-ghost btn-sm mt8" onclick="switchPage('goals')">View all goals →</button>
   </div>
 
+  <!-- Expenses this month -->
+  <div class="card">
+    <div class="card-label">Expenses — this month</div>
+    <div class="row-between mb8">
+      <div class="hero-num" id="ov-exp-total" style="font-size:2rem">₺0</div>
+      <div style="text-align:right">
+        <div style="font-family:var(--font-disp);font-size:1rem;font-weight:700" id="ov-exp-count">0 entries</div>
+        <div class="hero-sub">logged</div>
+      </div>
+    </div>
+    <div id="ov-exp-breakdown"></div>
+    <button class="btn btn-ghost btn-sm mt8" onclick="switchPage('goals');setGoalsTab('expenses')">Log expense →</button>
+  </div>
+
   <!-- Analytics highlights -->
   <div class="card">
     <div class="card-label">Analytics</div>
@@ -633,24 +679,58 @@ a { color:inherit; text-decoration:none; }
 <div class="page" id="page-goals">
 <div class="page-inner">
 
+  <!-- Tab switcher -->
   <div class="row-between mb12" style="margin-top:4px">
-    <div class="section-title" style="margin-bottom:0">🎯 Goals</div>
-    <button class="btn btn-primary btn-sm" onclick="openGoalSheet()">+ Add Goal</button>
+    <div style="display:flex;gap:4px;background:var(--surface2);border-radius:99px;padding:3px;border:1px solid var(--border)">
+      <button id="tabGoalsBtn"    class="tab-pill active" onclick="setGoalsTab('goals')">🎯 Goals</button>
+      <button id="tabExpensesBtn" class="tab-pill"        onclick="setGoalsTab('expenses')">💸 Expenses</button>
+    </div>
+    <div id="goalsTabAction"></div>
   </div>
 
-  <!-- Summary -->
-  <div class="card card-glow mb12">
-    <div class="card-label">Total saved across goals</div>
-    <div class="hero-num" id="goals-total-saved">₺0</div>
-    <div class="hero-sub mt4">across <span id="goals-count">0</span> active goals</div>
+  <!-- ── GOALS TAB ── -->
+  <div id="goalsTabContent">
+    <div class="card card-glow mb12">
+      <div class="card-label">Progress overview</div>
+      <div class="hero-num" id="goals-total-saved">₺0</div>
+      <div class="hero-sub mt4">saved across <span id="goals-count">0</span> goals</div>
+    </div>
+    <div id="goalsList"></div>
   </div>
 
-  <!-- Goal cards -->
-  <div id="goalsList"></div>
+  <!-- ── EXPENSES TAB ── -->
+  <div id="expensesTabContent" style="display:none">
 
-  <!-- Recent transactions -->
-  <div class="section-title mt12">💸 Recent Transactions</div>
-  <div id="txList" class="tx-list"></div>
+    <!-- summary strip -->
+    <div class="stat-grid mb12">
+      <div class="stat-chip orange-l">
+        <div class="sc-label">Today</div>
+        <div class="sc-val mono" id="exp-today">₺0</div>
+      </div>
+      <div class="stat-chip" style="border-color:rgba(248,113,113,0.25);background:rgba(248,113,113,0.06)">
+        <div class="sc-label">This month</div>
+        <div class="sc-val mono" id="exp-month">₺0</div>
+      </div>
+    </div>
+
+    <!-- filter row -->
+    <div class="row mb12" style="gap:6px;overflow-x:auto;scrollbar-width:none">
+      <button class="filter-pill active" data-filter="all"   onclick="setExpFilter(this,'all')">All</button>
+      <button class="filter-pill"        data-filter="today" onclick="setExpFilter(this,'today')">Today</button>
+      <button class="filter-pill"        data-filter="week"  onclick="setExpFilter(this,'week')">This week</button>
+      <button class="filter-pill"        data-filter="month" onclick="setExpFilter(this,'month')">This month</button>
+    </div>
+
+    <!-- category breakdown -->
+    <div class="card mb12">
+      <div class="card-label">By category</div>
+      <div id="exp-breakdown"></div>
+    </div>
+
+    <!-- expense list -->
+    <div class="section-title">Recent expenses</div>
+    <div id="expList" class="tx-list mt8"></div>
+  </div>
 
 </div>
 </div>
@@ -684,6 +764,16 @@ a { color:inherit; text-decoration:none; }
   <div class="card">
     <div class="card-label">Goal completion rate</div>
     <div id="an-goals-rate"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Expenses — this month by category</div>
+    <div id="an-expenses"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Net balance (income − expenses)</div>
+    <div id="an-net"></div>
   </div>
 
 </div>
@@ -791,7 +881,7 @@ a { color:inherit; text-decoration:none; }
     <span class="ni">📅</span><span class="nl">Schedule</span>
   </button>
   <button class="nav-btn" data-page="goals" onclick="switchPage('goals')">
-    <span class="ni">🎯</span><span class="nl">Goals</span>
+    <span class="ni">💰</span><span class="nl">Money</span>
   </button>
   <button class="nav-btn" data-page="analytics" onclick="switchPage('analytics')">
     <span class="ni">📊</span><span class="nl">Analytics</span>
@@ -927,7 +1017,69 @@ a { color:inherit; text-decoration:none; }
   </div>
 </div>
 
-<!-- ══════════════════ SHEET: ADD CATEGORY ══════════════════ -->
+<!-- ══════════════════ SHEET: ADD EXPENSE ══════════════════ -->
+<div class="overlay" id="expOverlay" onclick="closeSheet('expOverlay')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="expSheetTitle">Add Expense</div>
+    <input type="hidden" id="expEditId">
+
+    <div class="form-group">
+      <label class="form-label">Amount (₺)</label>
+      <input type="number" class="form-input" id="expAmount" placeholder="0" inputmode="decimal">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <input type="text" class="form-input" id="expDesc" placeholder="e.g. Lunch, Metro, Rent…">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-select" id="expCatSel"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input type="date" class="form-input" id="expDate">
+    </div>
+    <div class="row" style="gap:8px;margin-top:4px">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeSheet('expOverlay')">Cancel</button>
+      <button class="btn btn-primary" style="flex:2" onclick="saveExpense()">Save Expense</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ SHEET: ADD EXPENSE CATEGORY ══════════════════ -->
+<div class="overlay" id="expCatOverlay" onclick="closeSheet('expCatOverlay')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Add Expense Category</div>
+    <input type="hidden" id="expCatEditId">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="expCatName" placeholder="e.g. Food, Transport">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Emoji</label>
+        <input type="text" class="form-input" id="expCatEmoji" placeholder="🍔" maxlength="2">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Color</label>
+        <div class="color-row" id="expCatColorPicker" style="margin-top:8px">
+          <div class="color-swatch selected" style="background:#f87171" data-col="#f87171" onclick="selectExpCatColor(this)"></div>
+          <div class="color-swatch" style="background:#fb923c" data-col="#fb923c" onclick="selectExpCatColor(this)"></div>
+          <div class="color-swatch" style="background:#fbbf24" data-col="#fbbf24" onclick="selectExpCatColor(this)"></div>
+          <div class="color-swatch" style="background:#34d399" data-col="#34d399" onclick="selectExpCatColor(this)"></div>
+          <div class="color-swatch" style="background:#4f9cf9" data-col="#4f9cf9" onclick="selectExpCatColor(this)"></div>
+          <div class="color-swatch" style="background:#c084fc" data-col="#c084fc" onclick="selectExpCatColor(this)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="gap:8px;margin-top:4px">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeSheet('expCatOverlay')">Cancel</button>
+      <button class="btn btn-primary" style="flex:2" onclick="saveExpCat()">Save</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="catOverlay" onclick="closeSheet('catOverlay')">
   <div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
@@ -988,13 +1140,22 @@ const defaultData = {
     { id:'cat4', name:'Class',          emoji:'📚', color:'#c084fc', rate:0,   type:'unpaid' },
     { id:'cat5', name:'Free',           emoji:'☕', color:'#64748b', rate:0,   type:'unpaid' },
   ],
-  slots: [], // { id, day (0-6), start '09:00', end '17:00', catId, note, date (optional YYYY-MM-DD) }
+  slots: [],
   goals: [
     { id:'g1', name:'Debt Payment', emoji:'💳', color:'#4f9cf9', target:60000, current:0 },
     { id:'g2', name:'iPhone Fund',  emoji:'📱', color:'#fb923c', target:45000, current:0 },
     { id:'g3', name:'Business Fund',emoji:'🚀', color:'#34d399', target:20000, current:0 },
   ],
-  transactions: [], // { id, goalId, type 'add'|'sub', amount, desc, date }
+  transactions: [],
+  expenseCategories: [
+    { id:'ec1', name:'Food & Drinks', emoji:'🍔', color:'#f87171' },
+    { id:'ec2', name:'Transport',     emoji:'🚌', color:'#fb923c' },
+    { id:'ec3', name:'Rent & Bills',  emoji:'🏠', color:'#fbbf24' },
+    { id:'ec4', name:'Shopping',      emoji:'🛍️', color:'#c084fc' },
+    { id:'ec5', name:'Health',        emoji:'💊', color:'#34d399' },
+    { id:'ec6', name:'Other',         emoji:'📦', color:'#64748b' },
+  ],
+  expenses: [], // { id, amount, desc, catId, date (YYYY-MM-DD) }
   settings: { darkMode: true }
 };
 
@@ -1005,11 +1166,13 @@ function loadData() {
     const raw = localStorage.getItem(STORE_KEY);
     DB = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(defaultData));
     // ensure all keys
-    if (!DB.categories)    DB.categories = defaultData.categories;
-    if (!DB.slots)         DB.slots = [];
-    if (!DB.goals)         DB.goals = defaultData.goals;
-    if (!DB.transactions)  DB.transactions = [];
-    if (!DB.settings)      DB.settings = defaultData.settings;
+    if (!DB.categories)         DB.categories = defaultData.categories;
+    if (!DB.slots)              DB.slots = [];
+    if (!DB.goals)              DB.goals = defaultData.goals;
+    if (!DB.transactions)       DB.transactions = [];
+    if (!DB.expenseCategories)  DB.expenseCategories = defaultData.expenseCategories;
+    if (!DB.expenses)           DB.expenses = [];
+    if (!DB.settings)           DB.settings = defaultData.settings;
   } catch(e) { DB = JSON.parse(JSON.stringify(defaultData)); }
 }
 
@@ -1116,7 +1279,10 @@ function switchPage(id) {
 
 function handleFab() {
   if (currentPage === 'schedule') openSlotSheet();
-  if (currentPage === 'goals')    openGoalSheet();
+  if (currentPage === 'goals') {
+    if (goalsActiveTab === 'expenses') openExpSheet();
+    else openGoalSheet();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1202,6 +1368,28 @@ function renderOverview() {
       <div class="ac-val">${DB.slots.length}</div>
     </div>
   `;
+
+  // Expenses this month
+  const monthStart = new Date().toISOString().slice(0,8) + '01';
+  const monthExp = DB.expenses.filter(e => e.date >= monthStart);
+  const monthTotal = monthExp.reduce((a,e) => a+e.amount, 0);
+  document.getElementById('ov-exp-total').textContent = fmtMoneyFull(monthTotal);
+  document.getElementById('ov-exp-count').textContent = monthExp.length + ' entr' + (monthExp.length===1?'y':'ies');
+  const expByCat = {};
+  monthExp.forEach(e => { expByCat[e.catId] = (expByCat[e.catId]||0) + e.amount; });
+  const expBreakdown = document.getElementById('ov-exp-breakdown');
+  if (Object.keys(expByCat).length === 0) {
+    expBreakdown.innerHTML = '<div class="text-xs" style="text-align:center;padding:6px">No expenses this month</div>';
+  } else {
+    expBreakdown.innerHTML = Object.entries(expByCat).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([id,amt]) => {
+      const cat = DB.expenseCategories.find(c=>c.id===id) || { name:id, emoji:'📦', color:'#64748b' };
+      const pct = monthTotal > 0 ? (amt/monthTotal*100) : 0;
+      return `<div class="prog-item" style="margin-bottom:8px">
+        <div class="prog-head"><div class="pg-name">${cat.emoji} ${cat.name}</div><div class="pg-val">${fmtMoneyFull(amt)}</div></div>
+        <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${cat.color}"></div></div>
+      </div>`;
+    }).join('');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1335,16 +1523,42 @@ function calDayClick(d, dow, dateStr) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   GOALS PAGE
+   GOALS + EXPENSES PAGE
 ═══════════════════════════════════════════════════════════ */
+let goalsActiveTab = 'goals';
+let expFilter = 'all';
+let expCatColorSel = '#f87171';
+
+function setGoalsTab(tab) {
+  goalsActiveTab = tab;
+  document.getElementById('goalsTabContent').style.display   = tab==='goals'    ? '' : 'none';
+  document.getElementById('expensesTabContent').style.display = tab==='expenses' ? '' : 'none';
+  document.getElementById('tabGoalsBtn').classList.toggle('active',    tab==='goals');
+  document.getElementById('tabExpensesBtn').classList.toggle('active', tab==='expenses');
+  const actionEl = document.getElementById('goalsTabAction');
+  if (tab === 'goals') {
+    actionEl.innerHTML = `<button class="btn btn-primary btn-sm" onclick="openGoalSheet()">+ Goal</button>`;
+  } else {
+    actionEl.innerHTML = `<div class="row" style="gap:6px"><button class="btn btn-ghost btn-sm" onclick="openExpCatOverlay()">+ Cat</button><button class="btn btn-primary btn-sm" onclick="openExpSheet()">+ Expense</button></div>`;
+  }
+}
+
+function setExpFilter(el, filter) {
+  expFilter = filter;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  renderExpenses();
+}
+
 function renderGoals() {
-  const totalSaved = DB.goals.reduce((a,g)=>a+g.current,0);
+  setGoalsTab(goalsActiveTab); // refresh action buttons
+  const totalSaved = DB.goals.reduce((a,g) => a + g.current, 0);
   document.getElementById('goals-total-saved').textContent = fmtMoneyFull(totalSaved);
   document.getElementById('goals-count').textContent = DB.goals.length;
 
   const list = document.getElementById('goalsList');
   if (DB.goals.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🎯</div><div>No goals yet. Add one!</div></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🎯</div><div>No goals yet. Tap + Goal to add one.</div></div>`;
   } else {
     list.innerHTML = DB.goals.map(g => {
       const pct = g.target > 0 ? Math.min(100, g.current/g.target*100) : 0;
@@ -1360,9 +1574,8 @@ function renderGoals() {
               </div>
             </div>
             <div class="goal-actions">
-              <button class="goal-pill-btn add" onclick="openTxSheet('${g.id}','add')">＋ Add</button>
-              <button class="goal-pill-btn sub" onclick="openTxSheet('${g.id}','sub')">－ Deduct</button>
               <button class="goal-pill-btn edit" onclick="openGoalSheet('${g.id}')">✏️</button>
+              <button class="goal-pill-btn sub" onclick="deleteGoal('${g.id}')" style="background:rgba(248,113,113,0.1);color:var(--red)">🗑</button>
             </div>
           </div>
           <div class="goal-amounts">
@@ -1377,26 +1590,152 @@ function renderGoals() {
     }).join('');
   }
 
-  // Transactions
-  const txDiv = document.getElementById('txList');
-  const txs = [...DB.transactions].sort((a,b) => new Date(b.date)-new Date(a.date)).slice(0,20);
-  if (txs.length === 0) {
-    txDiv.innerHTML = '<div class="text-xs" style="text-align:center;padding:12px;">No transactions yet</div>';
+  renderExpenses();
+}
+
+function deleteGoal(id) {
+  if (!confirm('Delete this goal?')) return;
+  DB.goals = DB.goals.filter(g => g.id !== id);
+  saveData(); renderGoals(); showToast('Goal deleted');
+}
+
+function renderExpenses() {
+  const today = new Date().toISOString().slice(0,10);
+  const weekAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  const monthStart = new Date().toISOString().slice(0,8) + '01';
+
+  // Totals
+  const todayTotal = DB.expenses.filter(e => e.date === today).reduce((a,e) => a+e.amount, 0);
+  const monthTotal = DB.expenses.filter(e => e.date >= monthStart).reduce((a,e) => a+e.amount, 0);
+  document.getElementById('exp-today').textContent = fmtMoneyFull(todayTotal);
+  document.getElementById('exp-month').textContent = fmtMoneyFull(monthTotal);
+
+  // Filtered list
+  let filtered = [...DB.expenses];
+  if (expFilter === 'today') filtered = filtered.filter(e => e.date === today);
+  else if (expFilter === 'week') filtered = filtered.filter(e => e.date >= weekAgo);
+  else if (expFilter === 'month') filtered = filtered.filter(e => e.date >= monthStart);
+  filtered.sort((a,b) => b.date.localeCompare(a.date));
+
+  // Category breakdown for visible filter
+  const byCat = {};
+  filtered.forEach(e => {
+    if (!byCat[e.catId]) byCat[e.catId] = 0;
+    byCat[e.catId] += e.amount;
+  });
+  const filtTotal = filtered.reduce((a,e) => a+e.amount, 0);
+  const breakdown = document.getElementById('exp-breakdown');
+  if (Object.keys(byCat).length === 0) {
+    breakdown.innerHTML = '<div class="text-xs" style="text-align:center;padding:8px">No expenses in this period</div>';
   } else {
-    txDiv.innerHTML = txs.map(tx => {
-      const goal = DB.goals.find(g=>g.id===tx.goalId) || { name:'?', color:'#64748b', emoji:'?' };
-      const d = new Date(tx.date).toLocaleDateString('tr-TR');
+    breakdown.innerHTML = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([id,amt]) => {
+      const cat = DB.expenseCategories.find(c=>c.id===id) || { name:id, emoji:'📦', color:'#64748b' };
+      const pct = filtTotal > 0 ? (amt/filtTotal*100) : 0;
       return `
-        <div class="tx-row">
-          <div class="tx-dot" style="background:${tx.type==='add'?'var(--green)':'var(--red)'}"></div>
-          <div class="tx-info">
-            <div class="tx-desc">${goal.emoji} ${goal.name}${tx.desc ? ' · ' + tx.desc : ''}</div>
-            <div class="tx-meta">${d}</div>
+        <div class="prog-item">
+          <div class="prog-head">
+            <div class="pg-name">${cat.emoji} ${cat.name}</div>
+            <div class="pg-val">${fmtMoneyFull(amt)} (${Math.round(pct)}%)</div>
           </div>
-          <div class="tx-amount ${tx.type==='add'?'pos':'neg'}">${tx.type==='add'?'+':'−'}${fmtMoneyFull(tx.amount)}</div>
+          <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${cat.color}"></div></div>
         </div>`;
     }).join('');
   }
+
+  // Expense list rows
+  const expList = document.getElementById('expList');
+  if (filtered.length === 0) {
+    expList.innerHTML = `<div class="empty-state"><div class="empty-icon">🧾</div><div>No expenses logged yet</div></div>`;
+    return;
+  }
+
+  let prevDate = '';
+  expList.innerHTML = filtered.map(e => {
+    const cat = DB.expenseCategories.find(c=>c.id===e.catId) || { emoji:'📦', color:'#64748b' };
+    const dateLabel = e.date === today ? 'Today' : e.date === new Date(Date.now()-86400000).toISOString().slice(0,10) ? 'Yesterday' : e.date;
+    const dateHeader = e.date !== prevDate ? `<div style="font-size:0.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:8px 2px 4px">${dateLabel}</div>` : '';
+    prevDate = e.date;
+    return `${dateHeader}
+      <div class="exp-row">
+        <div class="exp-icon">${cat.emoji}</div>
+        <div class="exp-info">
+          <div class="exp-desc">${e.desc || cat.name}</div>
+          <div class="exp-meta">${cat.name}</div>
+        </div>
+        <div class="exp-amount">−${fmtMoneyFull(e.amount)}</div>
+        <div class="exp-del" onclick="deleteExpense('${e.id}')">🗑</div>
+      </div>`;
+  }).join('');
+}
+
+function deleteExpense(id) {
+  DB.expenses = DB.expenses.filter(e => e.id !== id);
+  saveData(); renderExpenses(); showToast('Expense deleted');
+}
+
+/* ── Expense sheet ── */
+function openExpSheet(editId) {
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('expEditId').value   = editId || '';
+  document.getElementById('expAmount').value   = '';
+  document.getElementById('expDesc').value     = '';
+  document.getElementById('expDate').value     = today;
+  document.getElementById('expSheetTitle').textContent = editId ? 'Edit Expense' : 'Add Expense';
+  const sel = document.getElementById('expCatSel');
+  sel.innerHTML = DB.expenseCategories.map(c => `<option value="${c.id}">${c.emoji} ${c.name}</option>`).join('');
+  if (editId) {
+    const exp = DB.expenses.find(e=>e.id===editId);
+    if (exp) {
+      document.getElementById('expAmount').value = exp.amount;
+      document.getElementById('expDesc').value   = exp.desc;
+      document.getElementById('expDate').value   = exp.date;
+      document.getElementById('expCatSel').value = exp.catId;
+    }
+  }
+  openSheet('expOverlay');
+}
+
+function saveExpense() {
+  const editId = document.getElementById('expEditId').value;
+  const amount = parseFloat(document.getElementById('expAmount').value) || 0;
+  const desc   = document.getElementById('expDesc').value.trim();
+  const catId  = document.getElementById('expCatSel').value;
+  const date   = document.getElementById('expDate').value || new Date().toISOString().slice(0,10);
+  if (amount <= 0) { showToast('⚠ Enter a valid amount'); return; }
+  if (editId) {
+    const idx = DB.expenses.findIndex(e=>e.id===editId);
+    if (idx > -1) DB.expenses[idx] = { ...DB.expenses[idx], amount, desc, catId, date };
+  } else {
+    DB.expenses.push({ id:uid(), amount, desc, catId, date });
+  }
+  saveData(); closeSheet('expOverlay'); renderExpenses(); showToast('✓ Expense saved');
+}
+
+/* ── Expense category overlay ── */
+function openExpCatOverlay() {
+  document.getElementById('expCatEditId').value = '';
+  document.getElementById('expCatName').value   = '';
+  document.getElementById('expCatEmoji').value  = '';
+  expCatColorSel = '#f87171';
+  document.querySelectorAll('#expCatColorPicker .color-swatch').forEach((el,i)=>el.classList.toggle('selected',i===0));
+  openSheet('expCatOverlay');
+}
+
+function selectExpCatColor(el) {
+  document.querySelectorAll('#expCatColorPicker .color-swatch').forEach(e=>e.classList.remove('selected'));
+  el.classList.add('selected');
+  expCatColorSel = el.dataset.col;
+}
+
+function saveExpCat() {
+  const name  = document.getElementById('expCatName').value.trim();
+  const emoji = document.getElementById('expCatEmoji').value || '📦';
+  if (!name) { showToast('⚠ Enter a name'); return; }
+  DB.expenseCategories.push({ id:uid(), name, emoji, color:expCatColorSel });
+  saveData(); closeSheet('expCatOverlay'); showToast('✓ Category added');
+  // refresh expense cat select if open
+  const sel = document.getElementById('expCatSel');
+  if (sel) sel.innerHTML = DB.expenseCategories.map(c=>`<option value="${c.id}">${c.emoji} ${c.name}</option>`).join('');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1470,6 +1809,39 @@ function renderAnalytics() {
             <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${g.color}"></div></div>
           </div>`;
       }).join('');
+
+  // Expense analytics
+  const monthStart = new Date().toISOString().slice(0,8) + '01';
+  const monthExp = DB.expenses.filter(e => e.date >= monthStart);
+  const monthExpTotal = monthExp.reduce((a,e) => a+e.amount, 0);
+  const expByCat = {};
+  monthExp.forEach(e => { expByCat[e.catId] = (expByCat[e.catId]||0) + e.amount; });
+  const anExp = document.getElementById('an-expenses');
+  if (monthExp.length === 0) {
+    anExp.innerHTML = '<div class="text-xs" style="text-align:center;padding:12px">No expenses logged this month</div>';
+  } else {
+    anExp.innerHTML = Object.entries(expByCat).sort((a,b)=>b[1]-a[1]).map(([id,amt]) => {
+      const cat = DB.expenseCategories.find(c=>c.id===id) || { emoji:'📦', name:id, color:'#64748b' };
+      const pct = monthExpTotal > 0 ? (amt/monthExpTotal*100) : 0;
+      return `<div class="prog-item">
+        <div class="prog-head"><div class="pg-name">${cat.emoji} ${cat.name}</div><div class="pg-val">${fmtMoneyFull(amt)} (${Math.round(pct)}%)</div></div>
+        <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${cat.color}"></div></div>
+      </div>`;
+    }).join('') + `<div class="divider"></div><div class="row-between"><span class="text-muted fw7">Total spent</span><span class="mono fw7">${fmtMoneyFull(monthExpTotal)}</span></div>`;
+  }
+
+  // Net balance
+  const net = s.totalEarn - monthExpTotal;
+  const netColor = net >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('an-net').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-chip accent-l"><div class="sc-label">Income (weekly)</div><div class="sc-val mono">${fmtMoneyFull(s.totalEarn)}</div></div>
+      <div class="stat-chip" style="border-color:rgba(248,113,113,0.25);background:rgba(248,113,113,0.06)"><div class="sc-label">Expenses (month)</div><div class="sc-val mono">${fmtMoneyFull(monthExpTotal)}</div></div>
+    </div>
+    <div class="row-between mt8" style="background:var(--surface2);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+      <span class="fw7">Net (weekly income − monthly expenses)</span>
+      <span style="font-family:var(--font-mono);font-weight:700;color:${netColor}">${net>=0?'+':''}${fmtMoneyFull(net)}</span>
+    </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
